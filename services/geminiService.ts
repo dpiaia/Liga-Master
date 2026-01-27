@@ -1,6 +1,40 @@
 
 import { GoogleGenAI, Type } from "@google/genai";
-import { TournamentFormat, TournamentRules } from "../types";
+import { TournamentFormat, TournamentRules, Team } from "../types";
+
+export async function generateTeamShield(team: Team): Promise<string | null> {
+  const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+  const prompt = `A professional sports logo crest for a soccer team named '${team.name}'. Minimalist vector style, clean lines, professional branding. Primary color: ${team.colors.primary}, Secondary color: ${team.colors.secondary}. The design should be a clean shield or badge, high quality, 1:1 aspect ratio, centered design on a solid dark background. No text inside unless it's just a letter.`;
+
+  try {
+    const response = await ai.models.generateContent({
+      model: 'gemini-2.5-flash-image',
+      contents: [{ parts: [{ text: prompt }] }],
+      config: {
+        imageConfig: {
+          aspectRatio: "1:1"
+        }
+      }
+    });
+
+    if (!response.candidates?.[0]?.content?.parts) return null;
+
+    for (const part of response.candidates[0].content.parts) {
+      if (part.inlineData) {
+        return `data:${part.inlineData.mimeType};base64,${part.inlineData.data}`;
+      }
+    }
+    return null;
+  } catch (error: any) {
+    // Detectar erro de cota (429) ou outros erros de limite
+    if (error?.message?.includes('429') || error?.status === 429 || error?.message?.includes('quota')) {
+       console.error("Limite de cota da API Gemini atingido para geração de imagens.");
+       throw new Error("QUOTA_EXHAUSTED");
+    }
+    console.error("Erro genérico ao gerar escudo:", error);
+    return null;
+  }
+}
 
 export async function identifyAmbiguities(wizardData: any, naturalInput: string): Promise<string[]> {
   const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
