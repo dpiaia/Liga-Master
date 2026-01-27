@@ -37,7 +37,7 @@ const COLOR_PRESETS = [
   '#ec4899', '#64748b', '#ffffff', '#000000'
 ];
 
-const SHIELD_PRESETS = ['🛡️', '🦁', ' eagles ', '🐺', '⭐', '🔥', '⚓', '⚡', '🐉', '🏔️', '🏟️', '⚽'];
+const SHIELD_PRESETS = ['🛡️', '🦁', '🦅', '🐺', '⭐', '🔥', '⚓', '⚡', '🐉', '🏔️', '🏟️', '⚽'];
 
 const INITIAL_TEAMS: Team[] = [
   { id: '1', name: 'Arsenal', shield: '🛡️', colors: { primary: '#ef4444', secondary: '#ffffff', accent: '#fbbf24' } },
@@ -80,7 +80,7 @@ const App: React.FC = () => {
       const qs = await identifyAmbiguities(wizardData, naturalInput);
       setQuestions(qs);
     } catch (e) {
-      setQuestions(["Como os empates em eliminatórias devem ser resolvidos?", "Qual o principal critério de desempate na tabela?"]);
+      setQuestions(["Defina os critérios de desempate.", "Defina a data de início."]);
     } finally {
       setIsAnalyzing(false);
     }
@@ -159,9 +159,9 @@ const App: React.FC = () => {
       setActiveTab('matches');
       setView('app');
       generateAllShields(finalTeams);
-    } catch (error) {
-      console.error(error);
-      alert("Erro ao processar as regras inteligentes.");
+    } catch (error: any) {
+      console.error("Erro no processamento lógico:", error);
+      alert(`Erro: ${error.message || "Não foi possível estruturar seu torneio agora. Tente novamente."}`);
     } finally {
       setIsProcessing(false);
     }
