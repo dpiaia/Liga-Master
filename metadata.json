@@ -1,0 +1,5 @@
+{
+  "name": "Master League",
+  "description": "Um gestor inteligente de campeonatos de futebol que transforma regras em linguagem natural em estruturas de torneio complexas, gerando tabelas, confrontos e logs de decisão.",
+  "requestFramePermissions": []
+}
