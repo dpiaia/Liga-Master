@@ -68,7 +68,9 @@ export async function identifyAmbiguities(wizardData: any, naturalInput: string)
   });
 
   try {
-    return JSON.parse(response.text.trim());
+    const text = response.text;
+    if (!text) return ["Como os empates em eliminatórias devem ser resolvidos?", "Qual o principal critério de desempate na tabela?"];
+    return JSON.parse(text.trim());
   } catch (e) {
     return ["Como os empates em eliminatórias devem ser resolvidos?", "Qual o principal critério de desempate na tabela?"];
   }
@@ -124,5 +126,9 @@ export async function parseTournamentRules(prompt: string): Promise<TournamentRu
     }
   });
 
-  return JSON.parse(response.text.trim());
+  const text = response.text;
+  if (!text) {
+    throw new Error("A IA retornou uma resposta vazia.");
+  }
+  return JSON.parse(text.trim());
 }
