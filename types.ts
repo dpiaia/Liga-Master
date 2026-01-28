@@ -2,9 +2,8 @@
 export enum TournamentFormat {
   ROUND_ROBIN = 'ROUND_ROBIN',
   KNOCKOUT = 'KNOCKOUT',
-  WORLD_CUP = 'WORLD_CUP',
-  CHAMPIONS = 'CHAMPIONS',
-  CUSTOM = 'CUSTOM'
+  LIGA_PLAYOFFS = 'LIGA_PLAYOFFS',
+  GROUPS_PLAYOFFS = 'GROUPS_PLAYOFFS'
 }
 
 export interface TeamColors {
@@ -18,6 +17,7 @@ export interface Team {
   name: string;
   colors: TeamColors;
   shield: string; // Emoji ou identificador de ícone
+  group?: string; // Grupo ao qual o time pertence (se aplicável)
 }
 
 export interface Match {
@@ -32,25 +32,19 @@ export interface Match {
   isCompleted: boolean;
 }
 
-export interface CustomFixture {
-  round: number;
-  homeTeamName: string;
-  awayTeamName: string;
-}
-
 export interface TournamentRules {
   name: string;
   format: TournamentFormat;
   teamsCount: number;
+  groupsCount?: number; // Nova propriedade para o formato de grupos
   rounds?: number;
-  groups?: number;
-  teamsPerGroup?: number;
   hasReturnMatch: boolean;
+  playoffLegs: number; // 1 ou 2 jogos por fase de playoff
+  finalLegs: number;   // 1 ou 2 jogos na final
   tieBreakerRules: string[];
   pointsForWin: number;
   pointsForDraw: number;
   pointsForLoss: number;
-  customFixtures?: CustomFixture[];
   startDate?: string;
 }
 
