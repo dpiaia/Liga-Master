@@ -17,10 +17,11 @@ import {
   Info,
   Palette,
   Target,
-  Grid
+  Grid,
+  Play
 } from 'lucide-react';
 import { Team, TournamentRules, TournamentState, TournamentFormat, Match } from './types';
-import { generateFixtures, calculateStandings } from './services/tournamentEngine';
+import { generateFixtures, calculateStandings, generatePlayoffsFromStandings } from './services/tournamentEngine';
 
 const COLOR_PRESETS = [
   '#ef4444', '#f97316', '#f59e0b', '#10b981', 
@@ -102,6 +103,25 @@ const App: React.FC = () => {
     setActiveTab('matches');
   };
 
+  const handleStartPlayoffs = () => {
+    if (!state || !standings) return;
+    
+    const { matches: playoffMatches, logs: playoffLogs } = generatePlayoffsFromStandings(
+      standings, 
+      state.rules, 
+      state.matches
+    );
+
+    if (playoffMatches.length > 0) {
+      setState({
+        ...state,
+        matches: [...state.matches, ...playoffMatches],
+        logs: [...state.logs, ...playoffLogs]
+      });
+      setActiveTab('matches');
+    }
+  };
+
   const updateScore = (matchId: string, homeScore: number, awayScore: number) => {
     if (!state) return;
     const newMatches = state.matches.map(m => 
@@ -120,6 +140,16 @@ const App: React.FC = () => {
   };
 
   const standings = state ? calculateStandings(state.matches, state.teams, state.rules) : null;
+
+  const isInitialPhaseComplete = state?.matches
+    .filter(m => m.phase.startsWith('Grupo') || m.phase === 'Fase de Liga')
+    .every(m => m.isCompleted) ?? false;
+
+  const hasPlayoffsStarted = state?.matches.some(m => !m.phase.startsWith('Grupo') && m.phase !== 'Fase de Liga') ?? false;
+
+  const showPlayoffButton = (state?.rules.format === TournamentFormat.GROUPS_PLAYOFFS || state?.rules.format === TournamentFormat.LIGA_PLAYOFFS) 
+    && isInitialPhaseComplete 
+    && !hasPlayoffsStarted;
 
   if (view === 'landing') {
     return (
@@ -375,6 +405,15 @@ const App: React.FC = () => {
                   <p className="text-[10px] text-slate-600 font-black uppercase mb-1.5 tracking-widest">Formato</p>
                   <p className="text-sm font-black text-emerald-400 uppercase italic">{state?.rules.format.replace('_', ' ')}</p>
                 </div>
+                
+                {showPlayoffButton && (
+                  <button 
+                    onClick={handleStartPlayoffs}
+                    className="w-full bg-emerald-600 hover:bg-emerald-500 p-4 rounded-2xl font-black text-xs uppercase flex items-center justify-center gap-2 transition-all shadow-lg animate-pulse"
+                  >
+                    <Play className="w-4 h-4" /> Gerar Playoffs
+                  </button>
+                )}
              </div>
           </div>
 
@@ -424,14 +463,14 @@ const App: React.FC = () => {
            <div className="min-h-[600px] bg-slate-900/30 border border-slate-800/80 rounded-[48px] p-8 lg:p-12 shadow-inner overflow-hidden">
               {activeTab === 'matches' && state && (
                 <div className="space-y-12">
-                  {Array.from(new Set(state.matches.map(m => m.round))).sort((a: any, b: any) => a - b).map(round => (
-                    <div key={round} className="space-y-6">
+                  {Array.from(new Set(state.matches.map(m => m.phase))).map(phase => (
+                    <div key={phase} className="space-y-6">
                       <div className="flex items-center gap-6">
-                        <span className="text-xs font-black uppercase tracking-[0.3em] text-emerald-500 italic">Rodada {round}</span>
+                        <span className="text-xs font-black uppercase tracking-[0.3em] text-emerald-500 italic">{phase}</span>
                         <div className="flex-1 h-px bg-slate-800/50" />
                       </div>
                       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
-                        {state.matches.filter(m => m.round === round).map(match => {
+                        {state.matches.filter(m => m.phase === phase).map(match => {
                           const home = state.teams.find(t => t.id === match.homeTeamId);
                           const away = state.teams.find(t => t.id === match.awayTeamId);
                           return (
@@ -480,7 +519,6 @@ const App: React.FC = () => {
               {activeTab === 'table' && state && standings && (
                 <div className="space-y-12">
                   {typeof standings === 'object' && !Array.isArray(standings) ? (
-                    // Renderização por Grupos
                     Object.entries(standings).map(([groupName, groupStats]) => (
                       <div key={groupName} className="space-y-4">
                         <div className="flex items-center gap-4">
@@ -491,7 +529,6 @@ const App: React.FC = () => {
                       </div>
                     ))
                   ) : (
-                    // Tabela Única
                     <TableComponent stats={standings as any[]} />
                   )}
                 </div>

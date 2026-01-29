@@ -18,10 +18,9 @@ export function generateFixtures(rules: TournamentRules, teams: Team[]): { match
     });
 
     for (let i = 0; i < numGroups; i++) {
-      const groupName = String.fromCharCode(65 + i); // A, B, C...
+      const groupName = String.fromCharCode(65 + i);
       const groupTeams = teamList.slice(i * teamsPerGroup, (i + 1) * teamsPerGroup);
       
-      // Aplicar Round Robin dentro do grupo
       const groupFixtures = generateRoundRobin(groupTeams, rules, groupName);
       matches = [...matches, ...groupFixtures];
       
@@ -41,22 +40,12 @@ export function generateFixtures(rules: TournamentRules, teams: Team[]): { match
       impact: `${matches.length} partidas organizadas no calendário.`
     });
   } else if (rules.format === TournamentFormat.KNOCKOUT) {
-    const matchesCount = Math.floor(teamList.length / 2);
-    for (let i = 0; i < matchesCount; i++) {
-      matches.push({
-        id: `k-r1-m${i+1}`,
-        homeTeamId: teamList[i * 2].id,
-        awayTeamId: teamList[i * 2 + 1].id,
-        round: 1,
-        phase: 'Oitavas/Quartas de Final',
-        isCompleted: false
-      });
-    }
+    matches = generateKnockoutInitialPhase(teamList, "Mata-Mata");
     logs.push({
       timestamp: new Date().toISOString(),
       action: 'ESTRUTURA_COPA',
       reason: `Geração de chaves de eliminação direta.`,
-      impact: `Primeira fase com ${matchesCount} confrontos definida.`
+      impact: `Primeira fase definida.`
     });
   }
 
@@ -112,6 +101,85 @@ function generateRoundRobin(teams: Team[], rules: TournamentRules, groupName?: s
   return matches;
 }
 
+function generateKnockoutInitialPhase(teams: Team[], phaseName: string): Match[] {
+  const matches: Match[] = [];
+  const matchesCount = Math.floor(teams.length / 2);
+  for (let i = 0; i < matchesCount; i++) {
+    matches.push({
+      id: `k-${phaseName}-${i+1}`,
+      homeTeamId: teams[i * 2].id,
+      awayTeamId: teams[i * 2 + 1].id,
+      round: 1,
+      phase: phaseName,
+      isCompleted: false
+    });
+  }
+  return matches;
+}
+
+export function generatePlayoffsFromStandings(
+  standings: any, 
+  rules: TournamentRules, 
+  currentMatches: Match[]
+): { matches: Match[], logs: DecisionLog[] } {
+  const newMatches: Match[] = [];
+  const logs: DecisionLog[] = [];
+  let qualifiedTeams: Team[] = [];
+
+  if (rules.format === TournamentFormat.GROUPS_PLAYOFFS) {
+    // Top 2 de cada grupo
+    Object.entries(standings as Record<string, any[]>).forEach(([groupName, groupStats]) => {
+      qualifiedTeams.push(...groupStats.slice(0, 2));
+    });
+  } else if (rules.format === TournamentFormat.LIGA_PLAYOFFS) {
+    // Top 4 ou Top 8 dependendo do número de times
+    const limit = rules.teamsCount >= 16 ? 8 : 4;
+    qualifiedTeams = (standings as any[]).slice(0, limit);
+  }
+
+  if (qualifiedTeams.length < 2) {
+    return { matches: [], logs: [{
+      timestamp: new Date().toISOString(),
+      action: 'PLAYOFFS_ERRO',
+      reason: 'Equipes insuficientes para gerar playoffs.',
+      impact: 'Nenhuma partida gerada.'
+    }]};
+  }
+
+  // Lógica simples de cruzamento (1º vs Último, 2º vs Penúltimo) ou A1 vs B2
+  const phaseName = qualifiedTeams.length === 2 ? "Final" : 
+                    qualifiedTeams.length === 4 ? "Semifinal" : "Quartas de Final";
+  
+  const lastRound = Math.max(...currentMatches.map(m => m.round), 0);
+
+  for (let i = 0; i < qualifiedTeams.length / 2; i++) {
+    const home = qualifiedTeams[i];
+    const away = qualifiedTeams[qualifiedTeams.length - 1 - i];
+    
+    const numLegs = phaseName === "Final" ? rules.finalLegs : rules.playoffLegs;
+
+    for (let leg = 0; leg < numLegs; leg++) {
+      newMatches.push({
+        id: `playoff-${phaseName}-m${i+1}-leg${leg+1}`,
+        homeTeamId: leg === 0 ? home.id : away.id,
+        awayTeamId: leg === 0 ? away.id : home.id,
+        round: lastRound + 1 + leg,
+        phase: phaseName,
+        isCompleted: false
+      });
+    }
+  }
+
+  logs.push({
+    timestamp: new Date().toISOString(),
+    action: 'PLAYOFFS_GERADOS',
+    reason: `Geração automática da fase de ${phaseName}.`,
+    impact: `${newMatches.length} partidas de eliminatórias adicionadas.`
+  });
+
+  return { matches: newMatches, logs };
+}
+
 export function calculateStandings(matches: Match[], teams: Team[], rules: TournamentRules) {
   const statsMap = new Map(teams.map(t => [t.id, {
     ...t,
@@ -125,7 +193,8 @@ export function calculateStandings(matches: Match[], teams: Team[], rules: Tourn
     goalDiff: 0,
   }]));
 
-  matches.filter(m => m.isCompleted).forEach(m => {
+  // Apenas computar standings para fases que não são mata-mata (simplificação)
+  matches.filter(m => m.isCompleted && (m.phase.startsWith('Grupo') || m.phase === 'Fase de Liga')).forEach(m => {
     const home = statsMap.get(m.homeTeamId);
     const away = statsMap.get(m.awayTeamId);
     if (!home || !away) return;
@@ -160,20 +229,14 @@ export function calculateStandings(matches: Match[], teams: Team[], rules: Tourn
 
   const sortFn = (a: any, b: any) => {
     if (b.points !== a.points) return b.points - a.points;
-    for (const criterion of rules.tieBreakerRules) {
-      if (criterion === 'GOAL_DIFF') {
-        if (b.goalDiff !== a.goalDiff) return b.goalDiff - a.goalDiff;
-      }
-      if (criterion === 'GOALS_FOR') {
-        if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
-      }
-    }
+    if (b.goalDiff !== a.goalDiff) return b.goalDiff - a.goalDiff;
+    if (b.goalsFor !== a.goalsFor) return b.goalsFor - a.goalsFor;
     return 0;
   };
 
-  // Se houver grupos, retornar um objeto com as tabelas separadas
-  const groups = Array.from(new Set(teams.map(t => t.group).filter(Boolean)));
-  if (groups.length > 0) {
+  const hasGroups = teams.some(t => t.group);
+  if (hasGroups) {
+    const groups = Array.from(new Set(teams.map(t => t.group).filter(Boolean)));
     const groupedResults: Record<string, typeof allStats> = {};
     groups.forEach(g => {
       groupedResults[g!] = allStats.filter(s => s.group === g).sort(sortFn);
